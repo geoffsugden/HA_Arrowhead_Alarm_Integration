@@ -1,0 +1,2 @@
+## File to store credentials that I don't want in the repository
+/custom_components/aap/credentials.py
