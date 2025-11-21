@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-import const
+from .const import CMD_MODE, CMD_STATUS, MODE_1_DELIMITER
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 class ArrowheadAPI:
     """Defines methods for communication with Arrowhead Alarm panel."""
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: str) -> None:
         """Create the API task defining the requried parameters."""
         self.host = host
         self.port = port
@@ -21,7 +21,7 @@ class ArrowheadAPI:
         self.writer: asyncio.StreamWriter | None = None
 
     @classmethod
-    async def create(cls, host: str, port: int) -> ArrowheadAPI:
+    async def create(cls, host: str, port: str) -> ArrowheadAPI:
         """Factory method to create and connect the API instance."""
 
         instance = cls(host, port)
@@ -29,7 +29,7 @@ class ArrowheadAPI:
         return instance
 
     @staticmethod
-    def validate_set_mode(host: str, port: int) -> bool:
+    def validate_set_mode(host: str, port: str) -> bool:
         """Confirms connnection available and sets panel to Mode 2.
 
         Returns:
@@ -38,10 +38,10 @@ class ArrowheadAPI:
         # Seconds to wait for validation process.
 
         instance = ArrowheadAPI(host, port)
-        TIMEOUT = 5.0
+        timeout = 5.0
         try:
             # Use asyncio.run() to execute the asynchronous core function synchronously
-            return asyncio.run(instance._async_validate_mode(host, port, TIMEOUT))
+            return asyncio.run(instance._async_validate_mode(host, port, timeout))
         except TimeoutError:
             _LOGGER.debug("Validation of AAP Connection failed due to timeout error")
             return False
@@ -50,7 +50,7 @@ class ArrowheadAPI:
             return False
 
     async def _async_validate_mode(
-        self, host: str, port: int, timeout: float = 5, mode: int = 2
+        self, host: str, port: str, timeout: float = 5, mode: int = 2
     ) -> bool:
         """Validates Connection and sets mode. Intended to be called by Static Method only so doens't check for class instance."""
 
@@ -66,7 +66,7 @@ class ArrowheadAPI:
             )
 
             # 2. Send the command
-            mode_command = f"{const.CMD_MODE} {mode}{const.MODE_1_DELIMITER[1]}"
+            mode_command = f"{CMD_MODE} {mode}{MODE_1_DELIMITER[1]}"
             cmd = mode_command.encode("ascii")
             writer.write(cmd)
             await writer.drain()
@@ -123,7 +123,7 @@ class ArrowheadAPI:
 
     async def async_send_status(self) -> None:
         """Sends the status command to the panel."""
-        await self.async_send_command(const.CMD_STATUS)
+        await self.async_send_command(CMD_STATUS)
 
     async def async_send_command(self, cmd: str) -> None:
         """Sends the command to the panel."""
