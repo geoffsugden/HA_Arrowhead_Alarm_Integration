@@ -1,6 +1,7 @@
 """Handles the back and forth between the alarm panel and home assistant."""
 
 from __future__ import annotations
+from typing import Any
 
 import asyncio
 import logging
@@ -28,30 +29,29 @@ class ArrowheadAPI:
         instance.reader, instance.writer = await asyncio.open_connection(host, port)
         return instance
 
-    @staticmethod
-    def validate_set_mode(host: str, port: str) -> bool:
+    async def validate_set_mode(self, host: str, port: str) -> dict[str, Any]:
         """Confirms connnection available and sets panel to Mode 2.
 
         Returns:
             bool: True if connection succesful and MODE 2 response recieved. Otherwise False
         """
         # Seconds to wait for validation process.
-
-        instance = ArrowheadAPI(host, port)
         timeout = 5.0
         try:
             # Use asyncio.run() to execute the asynchronous core function synchronously
-            return asyncio.run(instance._async_validate_mode(host, port, timeout))
+            return await self._async_validate_mode(host, port, timeout)
         except TimeoutError:
             _LOGGER.debug("Validation of AAP Connection failed due to timeout error")
-            return False
+            return {"succes": False, "message": "Failed to connect due to timout Error"}
         except Exception as e:  # noqa: BLE001
-            _LOGGER.debug("Validation of AAP Connection failed due to exception: {e}")
-            return False
+            return {
+                "succes": False,
+                "message": f"Validation of AAP Connection failed due to exception: {e}",
+            }
 
     async def _async_validate_mode(
         self, host: str, port: str, timeout: float = 5, mode: int = 2
-    ) -> bool:
+    ) -> [str, Any]:  # type: ignore
         """Validates Connection and sets mode. Intended to be called by Static Method only so doens't check for class instance."""
 
         reader = None
@@ -77,19 +77,21 @@ class ArrowheadAPI:
                 d_chunk = await asyncio.wait_for(reader.read(512), timeout=timeout)
 
                 if not d_chunk:
-                    _LOGGER.debug(
-                        "Connection closed by panel before mode response recieved"
-                    )
-                    return False
+                    return {
+                        "success": False,
+                        "message": "Connection closed by panel before mode response recieved",
+                    }
 
                 buffer += d_chunk
 
                 if expected_response in buffer:
-                    return True
+                    return {"success": True, "message": "Validation succesful"}
 
                 if len(buffer) > 8192:
-                    _LOGGER.debug("Validation buffer exceeded 8kb")
-                    return False
+                    return {
+                        "success": False,
+                        "message": "Validation buffer exceeded 8kb",
+                    }
         finally:
             if writer:
                 writer.close()
@@ -101,7 +103,7 @@ class ArrowheadAPI:
         if not self.writer:
             return
 
-        _LOGGER.debug("Starting TCP Shutdown...")
+        _LOGGER.debug("Starting TCP Shutdown")
         try:
             # 1. Ensure that any remaining queued data is sent.
             await self.writer.drain()
@@ -111,7 +113,7 @@ class ArrowheadAPI:
 
             # 3. Wait for the OS socket resources to be released.
             await self.writer.wait_closed()
-            _LOGGER.info("AAP TCP Connection Closed.")
+            _LOGGER.info("AAP TCP Connection Closed")
 
         except Exception as e:
             _LOGGER.debug("Error during AAP TCP Shutdown. %s", e)
@@ -129,7 +131,9 @@ class ArrowheadAPI:
         """Sends the command to the panel."""
 
         if not self.writer:
-            raise ConnectionError("Cannot send command %s: writer not available", cmd)
+            raise ConnectionError(
+                f"Cannot send command {cmd}: writer not available", cmd
+            )
 
         command = f"{cmd}\n"
         command_bytes = command.encode("ascii")
