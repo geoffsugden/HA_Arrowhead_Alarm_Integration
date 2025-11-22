@@ -1,16 +1,22 @@
 """The component for the Arrowhead Alarm Panel (AAP) integration."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .const import DOMAIN
 from .coordinator import AAPCoordinator
-from .credentials import host, port
 
-# The domain of your component. Should match the name of your folder.
-DOMAIN = "aap"
+PLATFORMS: list[Platform] = [
+    Platform.ALARM_CONTROL_PANEL,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+]
 
 
 @dataclass
@@ -19,6 +25,8 @@ class RuntimeData:
 
     coordinator: DataUpdateCoordinator
 
+
+AAPConfigEntry = ConfigEntry[RuntimeData]
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up platform from a config entry."""
@@ -39,13 +47,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         config_entry.add_update_listener(_async_update_listener)
     )
 
-    # Add the coordinator and update listener to config runtime data to make
-    # accessible throughout your integration
+    # Add the coordinator and update listener to config runtime data to make accessible throughout your integration
     config_entry.runtime_data = RuntimeData(coordinator)
 
-    # This is where you would typically load your platforms (e.g., binary_sensor)
-    # For now, we'll just store the entry data.
-    hass.data.setdefault(DOMAIN, {})[config_entry.entry_id] = config_entry.data
+    # Setup platforms (based on the list of entity types in PLATFORMS defined above)
+    # This calls the async_setup method in each of your entity type files.
+    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+
     return True
 
 
