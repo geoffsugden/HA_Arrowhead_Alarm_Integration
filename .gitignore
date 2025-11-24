@@ -1,2 +1,5 @@
 ## File to store credentials that I don't want in the repository
 /custom_components/aap/credentials.py
+/custom_components/arrowhead_alarm/credentials.py
+/custom_components/arrowhead_alarm/.vs/*
+/custom_components/arrowhead_alarm/__pycache__/*
