@@ -4,13 +4,16 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
-from homeassistant.core import DOMAIN, HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+from arrowhead_alarm_api import ArrowheadAlarmAPI
 
 __LOGGER = logging.getLogger(__name__)
 
-class AAPCoordinator(DataUpdateCoordinator):
-    """AAP coordinator."""
+
+class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
+    """Arrowhead_Alarm coordinator."""
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize coordinator."""
@@ -21,10 +24,7 @@ class AAPCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             __LOGGER,
-            name=f"{DOMAIN} ({config_entry.unique_id})",
+            name=f"{HOMEASSISTANT_DOMAIN} ({config_entry.unique_id})",
         )
 
-
-
-
-
+        self.api = ArrowheadAlarmAPI(self.host, self.port)

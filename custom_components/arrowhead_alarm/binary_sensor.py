@@ -1,4 +1,4 @@
-"""Binary Sensors for AAP Integration."""
+"""Binary Sensors for Arrowhead Alarm Integration."""
 
 import logging
 
@@ -11,31 +11,28 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import AAPConfigEntry  # type: ignore
+from . import ArrowheadConfigEntry
 from .const import DOMAIN
-from .coordinator import AAPCoordinator
+from .coordinator import ArrowheadAlarmCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: AAPConfigEntry,
+    config_entry: ArrowheadConfigEntry,
 ):
     """Set up the binary sensors."""
 
-    coordinator: AAPCoordinator = config_entry.runtime_data.coordinator
+    coordinator: ArrowheadAlarmCoordinator = config_entry.runtime_data.coordinator
 
     client = hass.data[DOMAIN]["client"]
 
     sensors = []
 
-    for zid, name in client.zones.items():
-        sensors.append(AAPBinary_Sensor(client, zid, name, sensor_type))
 
-
-class AAPBinary_Sensor(BinarySensorEntity):
-    """A sensor for the AAP alarm system. Can be of type Door, Motion or Garage Door."""
+class ArrowheadBinarySensor(BinarySensorEntity):
+    """A reed sensor for the AAP alarm system. Can be of type Door, Motion or Garage Door."""
 
     def __init__(self, client, zid, name, sensor_type) -> None:
         super().__init__()
