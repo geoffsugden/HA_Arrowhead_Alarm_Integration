@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import socket
 from typing import Any
 
 import voluptuous as vol
@@ -14,14 +13,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
+from .arrowhead_alarm_api import ArrowheadAlarmAPI
 
 _LOGGER = logging.getLogger(__name__)
 
-# TODO adjust the data schema to the data that you need
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Required(CONF_PORT): str,
+        vol.Required(CONF_PORT): int,
     }
 )
 
@@ -31,15 +30,20 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
-    # TODO Once Coordinator is complete we can call the relevant methods and make sure we can connect.
+    # Create a temporary API instance just to test connection
+    api = ArrowheadAlarmAPI(data[CONF_HOST], data[CONF_PORT])
 
-    # If you cannot connect:
-    # throw CannotConnect
-    # If the authentication is wrong:
-    # InvalidAuth
+    try:
+        # Attempt connection
+        await api.connect()
+        # If successful, close it immediately
+        await api.close_connection()
+    except Exception as err:
+        _LOGGER.error("Failed to connect: %s", err)
+        raise CannotConnect from err
 
-    # Return info that you want to store in the config entry.
-    return {"title": "Name of the device"}
+    # Return the title required for the entry
+    return {"title": f"Arrowhead Panel ({data[CONF_HOST]})"}
 
 
 class ArrowHeadConfigFlow(ConfigFlow, domain=DOMAIN):

@@ -25,7 +25,6 @@ class RuntimeData:
     coordinator: ArrowheadAlarmCoordinator
 
 
-# TODO Update entry annotation
 async def async_setup_entry(
     hass: HomeAssistant, config_entry: ArrowheadConfigEntry
 ) -> bool:
