@@ -32,7 +32,43 @@ async def async_setup_entry(
             zone_id=1,
             name="Garage Door",
             device_class=BinarySensorDeviceClass.GARAGE_DOOR,
-        )
+        ),
+        ArrowheadBinarySensor(
+            coordinator=coordinator,
+            zone_id=2,
+            name="Garage PIR",
+            device_class=BinarySensorDeviceClass.MOTION,
+        ),
+        ArrowheadBinarySensor(
+            coordinator=coordinator,
+            zone_id=3,
+            name="Lounge PIR",
+            device_class=BinarySensorDeviceClass.MOTION,
+        ),
+        ArrowheadBinarySensor(
+            coordinator=coordinator,
+            zone_id=4,
+            name="Guest Room",
+            device_class=BinarySensorDeviceClass.MOTION,
+        ),
+        ArrowheadBinarySensor(
+            coordinator=coordinator,
+            zone_id=5,
+            name="Office",
+            device_class=BinarySensorDeviceClass.MOTION,
+        ),
+        ArrowheadBinarySensor(
+            coordinator=coordinator,
+            zone_id=6,
+            name="Master Bedroom PIR",
+            device_class=BinarySensorDeviceClass.MOTION,
+        ),
+        ArrowheadBinarySensor(
+            coordinator=coordinator,
+            zone_id=7,
+            name="Master Bedroom Door",
+            device_class=BinarySensorDeviceClass.DOOR,
+        ),
     ]
 
     async_add_entities(sensors)

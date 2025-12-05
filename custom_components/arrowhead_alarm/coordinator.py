@@ -3,12 +3,15 @@
 import logging
 import asyncio
 from typing import Any
+from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
+
 from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .arrowhead_alarm_api import ArrowheadAlarmAPI
+from .const import DEFAULT_SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,11 +26,16 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
         self.port = config_entry.data[CONF_PORT]
         self.api = ArrowheadAlarmAPI(self.host, self.port)
         self.listen_task: asyncio.Task | None = None
+        self.poll_interval = config_entry.options.get(
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        )
 
         super().__init__(
             hass,
             _LOGGER,
             name=f"{HOMEASSISTANT_DOMAIN} ({config_entry.unique_id})",
+            update_method=self._async_update_data,
+            update_interval=timedelta(seconds=self.poll_interval),
         )
 
         self.api.register_callback(self._async_handle_api_message)
@@ -58,7 +66,7 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
             self.async_set_updated_data(new_data)
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Called once during setup to connect and start listener"""
+        """Called periodically and during setup to connect and start listener"""
 
         try:
             if not self.api.is_connected:

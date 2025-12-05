@@ -1,4 +1,5 @@
 DOMAIN = "arrowhead_alarm"
+DEFAULT_SCAN_INTERVAL = 60
 
 # Alarm Command Constants. While the panel expects bytes these are all declared as strings.
 # Calls to writer are expected to convert method to bytes before send.

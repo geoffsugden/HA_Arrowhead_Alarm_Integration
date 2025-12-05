@@ -12,8 +12,8 @@ from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN
 from .arrowhead_alarm_api import ArrowheadAlarmAPI
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
