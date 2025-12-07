@@ -1,5 +1,22 @@
+"""Contains constants specific to the arrowhead alarm integration."""
+
 DOMAIN = "arrowhead_alarm"
 DEFAULT_SCAN_INTERVAL = 60
+
+CONTROLS = "controls"
+CONTROL_COUNT = "control_count"
+CONTROL_NUMBER = "control_number"
+CONTROL_NAME = "control_name"
+
+# Configuration Keys
+ZONES = "zones"
+ZONE_COUNT = "zone_count"
+ZONE_NUMBER = "zone_number"
+ZONE_NAME = "zone_name"
+ZONE_TYPE = "zone_type"
+
+ZONE_TYPES = ["motion", "garage_door", "door"]
+
 
 # Alarm Command Constants. While the panel expects bytes these are all declared as strings.
 # Calls to writer are expected to convert method to bytes before send.

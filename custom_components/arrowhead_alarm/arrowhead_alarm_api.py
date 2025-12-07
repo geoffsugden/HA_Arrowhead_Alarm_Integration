@@ -224,6 +224,7 @@ class ArrowheadAlarmAPI:
         Parameters:
             output - the output to be triggered.
         """
+        _LOGGER.info("Triggered Output: %s", output)
         cmd = f"{CMD_TRIGGER_OUTPUT} {output}"
         await self._send_command(cmd)
 

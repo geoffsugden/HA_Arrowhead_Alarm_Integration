@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .coordinator import ArrowheadAlarmCoordinator
 
-_PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]
+_PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.BUTTON]
 
 type ArrowheadConfigEntry = ConfigEntry[RuntimeData]
 

@@ -1,17 +1,17 @@
 """Data Coordinator for AAP integration."""
 
-import logging
 import asyncio
-from typing import Any
 from datetime import timedelta
+import logging
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
-
 from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .arrowhead_alarm_api import ArrowheadAlarmAPI
-from .const import DEFAULT_SCAN_INTERVAL
+from .const import DEFAULT_SCAN_INTERVAL, ZONES, CONTROLS, ZONE_NUMBER, CONTROL_NUMBER
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +29,8 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
         self.poll_interval = config_entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         )
+        self.configured_zones = config_entry.data.get(ZONES, [])
+        self.configured_controls = config_entry.data.get(CONTROLS, [])
 
         super().__init__(
             hass,
@@ -66,7 +68,7 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
             self.async_set_updated_data(new_data)
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Called periodically and during setup to connect and start listener"""
+        """Called periodically and during setup to connect and start listener."""
 
         try:
             if not self.api.is_connected:
@@ -77,17 +79,23 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
 
             await self.api.set_mode(2)
 
+            zones_data = {}
+
+            for zone in self.configured_zones:
+                zone_id = zone[ZONE_NUMBER]
+
+                zones_data[zone_id] = {
+                    "open": False,
+                    "alarm": False,
+                    "bypassed": False,
+                }
+
             return {  # noqa: TRY300
                 "status": "online",
                 "area_1_state": "disarmed",
-                "zones": {
-                    1: {
-                        "open": False,
-                        "alarm": False,
-                        "bypassed": False,
-                    },
-                },
+                "zones": zones_data,
             }
 
         except Exception as err:
+            _LOGGER.warning("Error communicating with API: %s", err)
             raise UpdateFailed(f"Error communicating with API: {err}") from err

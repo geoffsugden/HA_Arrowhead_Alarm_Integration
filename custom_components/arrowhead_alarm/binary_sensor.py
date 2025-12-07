@@ -2,15 +2,15 @@
 
 import logging
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-)
+from typing import Any
+
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import ArrowheadConfigEntry
+from .const import DOMAIN, ZONE_NAME, ZONE_NUMBER, ZONE_TYPE, ZONES
 from .coordinator import ArrowheadAlarmCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,55 +20,22 @@ async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ArrowheadConfigEntry,
     async_add_entities: AddEntitiesCallback,
-):
+) -> None:
     """Set up the binary sensors."""
     # Get the coordinator from RuntimeData
     coordinator: ArrowheadAlarmCoordinator = config_entry.runtime_data.coordinator
 
-    # --- BUILDING BLOCK STEP: Create ONE sensor manually ---
+    configured_zones = config_entry.data.get(ZONES, [])
+
+    # Create a sensors list.
     sensors = [
         ArrowheadBinarySensor(
             coordinator=coordinator,
-            zone_id=1,
-            name="Garage Door",
-            device_class=BinarySensorDeviceClass.GARAGE_DOOR,
-        ),
-        ArrowheadBinarySensor(
-            coordinator=coordinator,
-            zone_id=2,
-            name="Garage PIR",
-            device_class=BinarySensorDeviceClass.MOTION,
-        ),
-        ArrowheadBinarySensor(
-            coordinator=coordinator,
-            zone_id=3,
-            name="Lounge PIR",
-            device_class=BinarySensorDeviceClass.MOTION,
-        ),
-        ArrowheadBinarySensor(
-            coordinator=coordinator,
-            zone_id=4,
-            name="Guest Room",
-            device_class=BinarySensorDeviceClass.MOTION,
-        ),
-        ArrowheadBinarySensor(
-            coordinator=coordinator,
-            zone_id=5,
-            name="Office",
-            device_class=BinarySensorDeviceClass.MOTION,
-        ),
-        ArrowheadBinarySensor(
-            coordinator=coordinator,
-            zone_id=6,
-            name="Master Bedroom PIR",
-            device_class=BinarySensorDeviceClass.MOTION,
-        ),
-        ArrowheadBinarySensor(
-            coordinator=coordinator,
-            zone_id=7,
-            name="Master Bedroom Door",
-            device_class=BinarySensorDeviceClass.DOOR,
-        ),
+            zone_id=zone[ZONE_NUMBER],
+            name=zone[ZONE_NAME],
+            device_class=zone[ZONE_TYPE],
+        )
+        for zone in configured_zones
     ]
 
     async_add_entities(sensors)
@@ -96,3 +63,14 @@ class ArrowheadBinarySensor(CoordinatorEntity, BinarySensorEntity):
         zone_state = zones.get(self._zone_id, {})
 
         return zone_state.get("open", False)
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Return information about the device."""
+        # This links the sensor back to the main device based on the config entry ID
+        return {
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "name": "Arrowhead Alarm Panel",
+            "manufacturer": "Arrowhead",
+            # Add model, firmware, etc., if available from the API
+        }
