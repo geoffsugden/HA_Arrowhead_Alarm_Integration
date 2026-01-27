@@ -51,20 +51,16 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
             status_type = message["zone"]["status_type"]
             action = message["zone"]["action"]
 
-            # 1. Create a copy of the current data for atomic update
+            # Create a copy of the current data for atomic update
             new_data = dict(self.data)
+            new_zones = dict(new_data.get("zones", {}))
 
-            if "zones" not in new_data:
-                new_data["zones"] = {}
+            current_zone = dict(new_zones.get(zone_id, {}))
+            current_zone[status_type] = action
 
-            # 2. Get the current zone states, or initizalise if needed
-            current_zone_state = new_data["zones"].get(zone_id, {})
+            new_zones[zone_id] = current_zone
+            new_data["zones"] = new_zones
 
-            # 3. Update the specific status_type (e.g. 'open') for the zone
-            current_zone_state[status_type] = action
-
-            # 4. Update the main dictionary and notify HA
-            new_data["zones"][zone_id] = current_zone_state
             self.async_set_updated_data(new_data)
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -74,27 +70,26 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
             if not self.api.is_connected:
                 await self.api.connect()
 
-            if not self.listen_task or self.listen_task.done():
-                self.listen_task = self.hass.async_create_task(self.api.listen())
-
             await self.api.set_mode(2)
 
-            zones_data = {}
+            if self.data and "zones" in self.data:
+                for z_id in self.data["zones"]:
+                    self.data["zones"][z_id]["open"] = False
+                    self.data["zones"][z_id]["open"] = False
 
-            for zone in self.configured_zones:
-                zone_id = zone[ZONE_NUMBER]
+            await self.api.request_status()
 
-                zones_data[zone_id] = {
-                    "open": False,
-                    "alarm": False,
-                    "bypassed": False,
+            if self.data is None:
+                zones_data = {
+                    z[ZONE_NUMBER]: {"open": False, "alarm": False, "bypassed": False}
+                    for z in self.configured_zones
                 }
-
-            return {  # noqa: TRY300
-                "status": "online",
-                "area_1_state": "disarmed",
-                "zones": zones_data,
-            }
+                return {
+                    "status": "online",
+                    "area_1_state": "disarmed",
+                    "zones": zones_data,
+                }
+            return self.data  # noqa: TRY300
 
         except Exception as err:
             _LOGGER.warning("Error communicating with API: %s", err)

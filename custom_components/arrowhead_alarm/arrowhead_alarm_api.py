@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 import logging
 import re
 from typing import Any
+import contextlib
 
 MODES = (1, 2, 3)
 DELIMITERS = ("\n", "\n\r", "\r\n", "\r")
@@ -118,6 +119,11 @@ class ArrowheadAlarmAPI:
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
 
+        self._queue: asyncio.Queue[str] = asyncio.Queue()
+
+        self._listen_task: asyncio.Task | None = None
+        self._consumer_task: asyncio.Task | None = None
+
         self._callbacks: list[Callable[[dict[str, Any]], Awaitable[None]]] = []
 
     def register_callback(
@@ -146,6 +152,12 @@ class ArrowheadAlarmAPI:
     async def connect(self) -> None:
         """Establishes the connection."""
         self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
+
+        # Start both tasks
+        self._listen_task = asyncio.create_task(self.listen(), name="AAP_Listener")
+        self._consumer_task = asyncio.create_task(
+            self._message_consumer(), name="AAP_Consumer"
+        )
 
     async def set_mode(self, mode: int = 2) -> None:
         """Sets the mode for the connection.
@@ -255,9 +267,7 @@ class ArrowheadAlarmAPI:
                     # Acknowledge receipt
                     await self._ack()
 
-                    data = self._translate_message(message)
-                    # Notify all registered callbacks
-                    await asyncio.gather(*(cb(data) for cb in self._callbacks))
+                    self._queue.put_nowait(message)
 
         except asyncio.CancelledError:
             _LOGGER.debug("Listening task cancelled")
@@ -266,8 +276,43 @@ class ArrowheadAlarmAPI:
             _LOGGER.exception("Error while listening: %s", e)
             raise
 
+    async def _message_consumer(self) -> None:
+        """Background task to process the queue without blocking the listener."""
+
+        while True:
+            message = await self._queue.get()
+
+            data = self._translate_message(message)
+
+            try:
+                # Notify all registered callbacks
+                if data:
+                    await asyncio.gather(*(cb(data) for cb in self._callbacks))
+            except Exception as e:
+                # Yes we are catching a generic exception here, but reasons:
+                # 1. We don't expect it to fail and this is not production code.
+                #       If I notice errors in my HA instance or want to distribute this wide
+                #       then I'll do some more work on this.
+                # 2. We don't want an error here to cause a silent failure of the message consumer.
+                _LOGGER.error("Failed to process message '%s': %s", message, e)
+
+                # We don't know what state we might have missed, so force a resync.
+                await self.request_status()
+            finally:
+                self._queue.task_done()
+
     async def close_connection(self) -> None:
         """Closes the connection to the Alarm Panel."""
+
+        # Cancel tasks
+        for task in [self._listen_task, self._consumer_task]:
+            if task and not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+        self._listen_task = None
+        self._consumer_task = None
         if self.writer:
             self.writer.close()
             await self.writer.wait_closed()
@@ -305,7 +350,7 @@ class ArrowheadAlarmAPI:
 
         raw_message = message.strip().upper()
 
-        match = ZONE_MESSAGE_PATTERN.match(raw_message.strip().upper())
+        match = ZONE_MESSAGE_PATTERN.match(raw_message)
 
         if not match:
             # Not a standard zone status message (e.g., could be a partition status or system status)

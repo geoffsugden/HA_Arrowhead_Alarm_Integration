@@ -92,33 +92,58 @@ CMD_STATUS = "STATUS"  # Query system status
 CMD_MODE = "MODE"  # Set handshake and message mode
 
 
-# --- 5. Panel-to-Remote Status Messages (Prefixes) ---
-
-# Partition Status Messages
-MSG_ARM_AWAY = "A"
-MSG_ARM_STAY = "S"
-MSG_DISARM = "D"
-MSG_PARTITION_ALARM = "AA"  # (Mode 2 only)
-MSG_PARTITION_ALARM_RESTORE = "AR"  # (Mode 2 only)
-MSG_PARTITION_READY = "RO"
-MSG_PARTITION_NOT_READY = "NR"
-
-# Zone Status Messages
-MSG_ZONE_OPEN = "ZO"
-MSG_ZONE_CLOSED = "ZC"
-MSG_ZONE_ALARM = "ZA"
-MSG_ZONE_ENTRY = "ZE"
-MSG_ZONE_ENTRY_DELAY = "ZEDS"
-MSG_ZONE_ALARM_RESTORE = "ZR"
-MSG_ZONE_BYPASS = "ZBY"
-MSG_ZONE_UNBYPASS_RESTORE = "ZBYR"
-MSG_ZONE_TROUBLE_ALARM = "ZT"
-
-# System Status Messages
-MSG_SYSTEM_MAINS_FAIL = "MF"
-MSG_SYSTEM_MAINS_RESTORE = "MR"
-MSG_SYSTEM_BATTERY_LOW = "BF"
-MSG_SYSTEM_BATTERY_RESTORE = "BR"
+ALARM_ALL_STATUS_MESSAGES = {
+    # -----------------------------------------------------------------
+    # SYSTEM Status Messages (No parameters: BF, BR, CAL, CLF, etc.)
+    "BF": "system_battery_low",  # System battery low/missing
+    "BR": "system_battery_restored",  # System battery restored
+    "CAL": "comms_to_station_started",  # Communication to monitoring station started
+    "CLF": "comms_to_station_finished",  # Communication to monitoring station finished
+    "DF": "dialer_failed",  # Dialer (comms) failed
+    "DR": "dialer_restored",  # Dialer (comms) restored
+    "FF": "system_fuse_fault",  # System fuse fault
+    "FR": "system_fuse_restored",  # System fuse restore
+    "LF": "dialer_line_fault",  # Dialer (comms) line fault
+    "LR": "dialer_line_restored",  # Dialer (comms) line restored
+    "MF": "mains_power_failure",  # Mains power failure
+    "MR": "mains_power_restore",  # Mains power restore
+    "RIF": "receiver_fault",  # Receiver fault
+    "RIR": "receiver_restored",  # Receiver restore
+    # SYSTEM Status Messages (With parameter: Pendant x)
+    "PBF": "pendant_battery_low",  # Pendant x battery low
+    "PBR": "pendant_battery_restored",  # Pendant x battery restored
+    # -----------------------------------------------------------------
+    # PARTITION Status Messages (Requires Partition number x)
+    "A": "partition_away_armed",  # Partition x has away-armed
+    "AA": "partition_in_alarm",  # Partition x is in alarm (Note: AA is overloaded for Output x off)
+    "AR": "partition_alarm_restored",  # Partition x is no longer in alarm
+    "D": "partition_disarmed",  # Partition x has disarmed
+    "EA": "partition_exit_away_timing",  # Partition x started away-arm exit period
+    "ES": "partition_exit_stay_timing",  # Partition x started stay-arm exit period
+    "NR": "partition_not_ready",  # Partition x is not ready (not sealed)
+    "RO": "partition_ready",  # Partition x is ready (sealed)
+    "S": "partition_stay_armed",  # Partition x has stay-armed
+    # -----------------------------------------------------------------
+    # ZONE Status Messages (Requires Zone number x)
+    "ZA": "zone_alarm",  # Zone x is in alarm
+    "ZBL": "zone_battery_low",  # Radio zone x battery low
+    "ZBR": "zone_battery_restored",  # Radio zone x battery restored
+    "ZBY": "zone_bypassed",  # Zone x bypassed
+    "ZBYR": "zone_unbypassed",  # Zone x unbypassed
+    "ZC": "zone_closed",  # Zone x closed (sealed)
+    "ZIA": "zone_sensor_watch_alarm",  # Zone x sensor-watch alarm
+    "ZIR": "zone_sensor_watch_restored",  # Zone x sensor-watch restored
+    "ZO": "zone_open",  # Zone x open (un-sealed)
+    "ZR": "zone_alarm_restored",  # Zone x alarm restored
+    "ZT": "zone_trouble_alarm",  # Zone x trouble alarm
+    "ZTR": "zone_trouble_restored",  # Zone x trouble alarm restored
+    "ZSA": "zone_supervise_alarm",  # Zone x supervise alarm
+    "ZSR": "zone_supervise_restored",  # Zone x supervise alarm restored
+    # -----------------------------------------------------------------
+    # OUTPUT Status Messages (Requires Output number x)
+    "OO": "output_on",  # Output x on
+    "OR": "output_off",  # Output x off
+}
 
 
 # --- 6. Panel Error Codes (ERR x) ---

@@ -5,12 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.exceptions import HomeAssistantError
 
 from . import ArrowheadConfigEntry
 from .const import CONTROL_NAME, CONTROL_NUMBER, CONTROLS, DOMAIN
@@ -57,14 +56,14 @@ class ArrowheadButton(CoordinatorEntity, ButtonEntity):
         """Return information about the device."""
         # This links the button to the main alarm panel device
         return {
-            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},  # type: ignore  # noqa: PGH003
             "name": "Arrowhead Alarm Panel",
             "manufacturer": "Arrowhead",
         }
 
     async def async_press(self) -> None:
         """Handle the button press."""
-        api = self.coordinator.api
+        api = self.coordinator.api  # type: ignore  # noqa: PGH003
 
         try:
             await api.trigger_output(self._control_id)

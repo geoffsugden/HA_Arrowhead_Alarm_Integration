@@ -50,6 +50,7 @@ class ArrowheadBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._zone_id = zone_id
         self._attr_name = name
         self._attr_device_class = device_class
+        self._zone_type = device_class
         # Unique ID allows UI editing
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_zone_{zone_id}"
 
@@ -69,8 +70,35 @@ class ArrowheadBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return information about the device."""
         # This links the sensor back to the main device based on the config entry ID
         return {
-            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},  # type: ignore
             "name": "Arrowhead Alarm Panel",
             "manufacturer": "Arrowhead",
             # Add model, firmware, etc., if available from the API
         }
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return attributes to display in the UI."""
+
+        zone_data = self.coordinator.data["zones"].get(self._zone_id, {})
+
+        is_bypassed = zone_data.get("bypassed", False)
+
+        return {
+            "is_bypassed": is_bypassed,
+            "zone_type": self._zone_type,
+        }
+
+    @property
+    def icon(self) -> str | None:
+        """Return the icon to use in the frontend."""
+        # Check the state from the extra_state_attributes property's logic
+        zone_data = self.coordinator.data["zones"].get(self._zone_id, {})
+        is_bypassed = zone_data.get("bypassed", False)
+
+        if is_bypassed:
+            # Use a distinctive icon for bypassed zones
+            return "mdi:shield-off-outline"
+
+        # Fallback to the default icon for motion/open sensors
+        return None
