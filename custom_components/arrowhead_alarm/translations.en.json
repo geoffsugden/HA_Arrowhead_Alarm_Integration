@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Arrowhead Panel",
+        "data": {
+          "host": "IP Address",
+          "port": "Port"
+        }
+      },
+      "setup_entity_counts": {
+        "title": "Configure Counts",
+        "description": "Specify how many zones and controls you wish to configure.",
+        "data": {
+          "zone_count": "Number of Zones",
+          "control_count": "Number of Controls"
+        }
+      },
+      "setup_panel": {
+        "title": "Alarm Panel Settings",
+        "description": "Configure the main alarm panel entity.",
+        "data": {
+          "name": "Panel Name",
+          "code": "Access Code (Optional PIN)"
+        }
+      },
+      "setup_zones": {
+        "title": "Setup Zone {index} of {count}",
+        "data": {
+          "zone_number": "Zone Number",
+          "zone_name": "Zone Name",
+          "zone_type": "Zone Type"
+        }
+      },
+      "setup_controls": {
+        "title": "Setup Control {index} of {count}",
+        "data": {
+          "control_number": "Control Number",
+          "control_name": "Control Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the panel. Please check your IP and Port.",
+      "invalid_auth": "Invalid authentication.",
+      "unknown": "Unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This Arrowhead panel is already configured."
+    }
+  }
+}

@@ -1,0 +1,27 @@
+bypass_zone:
+  name: Bypass Zone
+  description: Temporarily bypass a specific alarm zone.
+  fields:
+    zone_id:
+      name: Zone Number
+      description: The number of the zone to bypass (e.g., 1, 5, 12).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          mode: box
+
+unbypass_zone:
+  name: Unbypass Zone
+  description: Re-enable a previously bypassed alarm zone.
+  fields:
+    zone_id:
+      name: Zone Number
+      description: The number of the zone to unbypass.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          mode: box

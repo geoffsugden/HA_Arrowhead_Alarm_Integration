@@ -8,13 +8,16 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_NAME, CONF_CODE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .arrowhead_alarm_api import ArrowheadAlarmAPI
@@ -92,7 +95,9 @@ class ArrowHeadConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(info.get("title"))
+                host = user_input[CONF_HOST]
+                port = user_input[CONF_PORT]
+                await self.async_set_unique_id(f"{host}_{port}")
                 self._abort_if_unique_id_configured()
 
                 self.user_data = user_input
@@ -135,6 +140,36 @@ class ArrowHeadConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(step_id="setup_entity_counts", data_schema=schema)
 
+    async def async_step_setup_panel(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure the main Alarm Panel Entity."""
+
+        if user_input is not None:
+            self.user_data.update(user_input)
+
+            if self._zone_count > 0:
+                return await self.async_step_setup_zones()
+            if self._control_count > 0:
+                return await self.async_step_setup_controls()
+
+            return self.async_create_entry(
+                title=self.user_data.get(
+                    CONF_NAME, f"Arrowhead Panel ({self.user_data[CONF_HOST]})"
+                ),
+                data=self.user_data,
+            )
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default="Alarm Panel"): str,
+                vol.Optional(CONF_CODE): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
+            }
+        )
+
+        return self.async_show_form(step_id="setup_panel", data_schema=schema)
+
     async def async_step_setup_zones(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -146,7 +181,7 @@ class ArrowHeadConfigFlow(ConfigFlow, domain=DOMAIN):
             self.user_data[ZONES] = self._configured_zones
             if self._control_count > 0:
                 return await self.async_step_setup_controls()
-
+            self.user_data[CONTROLS] = []
             return self.async_create_entry(
                 title=f"Arrowhead Panel ({self.user_data[CONF_HOST]})",
                 data=self.user_data,

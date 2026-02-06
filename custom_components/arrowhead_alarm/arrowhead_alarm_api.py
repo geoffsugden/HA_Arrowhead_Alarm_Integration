@@ -95,8 +95,24 @@ ZONE_STATUS_MAP = {
     },
 }
 
+PARTITION_STATUS_MAP = {
+    # PARTITION Status Messages (Requires Partition number x)
+    "A": "partition_away_armed",  # Partition x has away-armed
+    "AA": "partition_in_alarm",  # Partition x is in alarm
+    "AR": "partition_alarm_restored",  # Partition x is no longer in alarm
+    "D": "partition_disarmed",  # Partition x has disarmed
+    "EA": "partition_exit_away_timing",  # Partition x started away-arm exit period
+    "ES": "partition_exit_stay_timing",  # Partition x started stay-arm exit period
+    "NR": "partition_not_ready",  # Partition x is not ready (not sealed)
+    "RO": "partition_ready",  # Partition x is ready (sealed)
+    "S": "partition_stay_armed",  # Partition x has stay-armed
+    "OO": "output_on",
+    "OR": "output_ready",
+}
+
 # Regex pattern to capture the prefix (2-4 characters) and the zone number (1-2 digits)
 # Example matches: 'ZA12', 'ZBYR1', 'ZO5'
+PARTITION_MESSAGE_PATTERN = re.compile(r"^([A-Z]{1,2})(\d{1,2})$")
 ZONE_MESSAGE_PATTERN = re.compile(r"^(Z[A-Z]{1,3})(\d{1,2})$")
 
 _LOGGER = logging.getLogger(__name__)
@@ -350,35 +366,58 @@ class ArrowheadAlarmAPI:
 
         raw_message = message.strip().upper()
 
-        match = ZONE_MESSAGE_PATTERN.match(raw_message)
+        if "OK STATUS" in raw_message:
+            return {"type": "sync_start"}
 
-        if not match:
-            # Not a standard zone status message (e.g., could be a partition status or system status)
-            return {}
-
-        # At the moment we only care of the zone is open or closed, the rest will come with the alarm panel.
-        prefix = match.group(1)
-        zone_string = match.group(2)
-
-        status_info = ZONE_STATUS_MAP.get(prefix)
-
-        if not status_info:
-            return {}
-
-        try:
-            zone_id = int(zone_string)
-        except ValueError:
-            _LOGGER.error(
-                "Invalid Zone number %s, in message, %s", zone_string, raw_message
-            )
-
-        result = {
-            "zone": {
-                "zone_id": zone_id,
-                "status_type": status_info["status_type"],
-                "action": status_info["action"],
-                "description": status_info["description"],
+        if "OK OUTPUTON" in raw_message:
+            return {
+                "type": "command_response",
+                "data": {"status": "success", "command": "output"},
             }
-        }
 
-        return result
+        # Handle ERR Responses (e.g., ERR 1, ERR 05)
+        if raw_message.startswith("ERR"):
+            try:
+                err_code = int(raw_message.split()[1])
+                return {  # noqa: TRY300
+                    "type": "command_response",
+                    "data": {"status": "error", "code": err_code},
+                }
+            except (IndexError, ValueError):
+                return {
+                    "type": "command_response",
+                    "data": {"status": "error", "code": 0},
+                }
+
+        zone_match = ZONE_MESSAGE_PATTERN.match(raw_message)
+
+        # Check if it's a zone first
+        if zone_match:
+            prefix, zone_id = zone_match.groups()
+            status_info = ZONE_STATUS_MAP.get(prefix)
+            if status_info:
+                zone_id = int(zone_id)
+                return {
+                    "type": "zone",
+                    "data": {
+                        "zone_id": zone_id,
+                        "status_type": status_info["status_type"],
+                        "action": status_info["action"],
+                    },
+                }
+
+        partition_match = PARTITION_MESSAGE_PATTERN.match(raw_message)
+
+        if partition_match:
+            prefix, area_id = partition_match.groups()
+            status_string = PARTITION_STATUS_MAP.get(prefix)
+            return {
+                "type": "partition",
+                "data": {
+                    "area_id": int(area_id),
+                    "status": status_string,
+                    "raw_code": prefix,
+                },
+            }
+
+        return {}

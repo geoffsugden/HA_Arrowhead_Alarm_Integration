@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .arrowhead_alarm_api import ArrowheadAlarmAPI
+from .const import DOMAIN
 from .coordinator import ArrowheadAlarmCoordinator
 
 _PLATFORMS: list[Platform] = [
@@ -29,24 +29,34 @@ class RuntimeData:
     coordinator: ArrowheadAlarmCoordinator
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, config_entry: ArrowheadConfigEntry
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ArrowheadConfigEntry) -> bool:
     """Set up Arrowhead Alarm Panel from a config entry."""
 
-    coordinator = ArrowheadAlarmCoordinator(hass, config_entry)
+    api = ArrowheadAlarmAPI(entry.data[CONF_HOST], entry.data[CONF_PORT])
+
+    coordinator = ArrowheadAlarmCoordinator(hass, api, entry.entry_id, entry.data)
 
     await coordinator.async_config_entry_first_refresh()
 
-    # Test to see if api initialised correctly, else raise ConfigNotReady to make HA retry setup
-    # TODO if not coordinator.api.connected:
-    #     raise ConfigEntryNotReady
+    entry.runtime_data = RuntimeData(coordinator=coordinator)
 
-    # TODO Initialise a listener for config flow options changes.
+    await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
 
-    config_entry.runtime_data = RuntimeData(coordinator)
+    async def handle_alarm_action(call):
+        """Handle the service call."""
+        zone_id = call.data.get("zone_id")
+        pin = call.data.get("pin")
+        if call.service == "bypass_zone":
+            await coordinator.api.bypass_zone(zone_id)
+        elif call.service == "unbypass_zone":
+            await coordinator.api.unbypass_zone(zone_id)
+        else:
+            await coordinator.api.disarm(pin)
+        await coordinator.async_refresh()
 
-    await hass.config_entries.async_forward_entry_setups(config_entry, _PLATFORMS)
+    hass.services.async_register(DOMAIN, "bypass_zone", handle_alarm_action)
+    hass.services.async_register(DOMAIN, "unbypass_zone", handle_alarm_action)
+    hass.services.async_register(DOMAIN, "disarm", handle_alarm_action)
 
     return True
 

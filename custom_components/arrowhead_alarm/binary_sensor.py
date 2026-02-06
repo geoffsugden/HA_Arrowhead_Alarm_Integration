@@ -2,14 +2,9 @@
 
 import logging
 
-from typing import Any
-
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import ArrowheadConfigEntry
 from .const import DOMAIN, ZONE_NAME, ZONE_NUMBER, ZONE_TYPE, ZONES
 from .coordinator import ArrowheadAlarmCoordinator
 
@@ -17,42 +12,51 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: ArrowheadConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
+    hass,
+    entry,
+    async_add_entities,
+):
     """Set up the binary sensors."""
     # Get the coordinator from RuntimeData
-    coordinator: ArrowheadAlarmCoordinator = config_entry.runtime_data.coordinator
+    coordinator = entry.runtime_data.coordinator
 
-    configured_zones = config_entry.data.get(ZONES, [])
+    configured_zones = entry.data.get(ZONES, [])
 
     # Create a sensors list.
-    sensors = [
-        ArrowheadBinarySensor(
-            coordinator=coordinator,
-            zone_id=zone[ZONE_NUMBER],
-            name=zone[ZONE_NAME],
-            device_class=zone[ZONE_TYPE],
-        )
-        for zone in configured_zones
-    ]
-
-    async_add_entities(sensors)
+    async_add_entities(
+        [ArrowheadBinarySensor(coordinator, zone) for zone in configured_zones]
+    )
 
 
-class ArrowheadBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ArrowheadBinarySensor(
+    CoordinatorEntity[ArrowheadAlarmCoordinator], BinarySensorEntity
+):
     """A binary sensor for an Arrowhead Alarm Zone."""
 
-    def __init__(self, coordinator, zone_id: int, name: str, device_class) -> None:
+    def __init__(self, coordinator, zone_config) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._zone_id = zone_id
-        self._attr_name = name
-        self._attr_device_class = device_class
-        self._zone_type = device_class
-        # Unique ID allows UI editing
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_zone_{zone_id}"
+        self._zone_id = zone_config[ZONE_NUMBER]
+        self._attr_name = zone_config[ZONE_NAME]
+        self._attr_device_class = zone_config[ZONE_TYPE]
+        self._attr_unique_id = f"{coordinator.entry_id}_zone_{self._zone_id}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, coordinator.entry_id)},
+            "name": "Arrowhead Alarm Panel",
+        }
+
+    async def async_bypass_zone(self) -> None:
+        """Service call to bypass this specific zone."""
+        _LOGGER.info("Bypassing zone %s", self._zone_id)
+        await self.coordinator.api.bypass_zone(self._zone_id)
+        # Refresh to update the 'is_bypassed' attribute in the UI
+        await self.coordinator.async_refresh()
+
+    async def async_unbypass_zone(self) -> None:
+        """Service call to unbypass this specific zone."""
+        _LOGGER.info("Unbypassing zone %s", self._zone_id)
+        await self.coordinator.api.unbypass_zone(self._zone_id)
+        await self.coordinator.async_refresh()
 
     @property
     def is_on(self) -> bool:
@@ -61,43 +65,29 @@ class ArrowheadBinarySensor(CoordinatorEntity, BinarySensorEntity):
         # Structure expected: {'zones': {1: True, 2: False}}
         zones = self.coordinator.data.get("zones", {})
 
-        zone_state = zones.get(self._zone_id, {})
-
-        return zone_state.get("open", False)
+        return zones.get(self._zone_id, {}).get("open", False)
 
     @property
-    def device_info(self) -> dict[str, Any]:
-        """Return information about the device."""
-        # This links the sensor back to the main device based on the config entry ID
-        return {
-            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},  # type: ignore
-            "name": "Arrowhead Alarm Panel",
-            "manufacturer": "Arrowhead",
-            # Add model, firmware, etc., if available from the API
-        }
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
+    def extra_state_attributes(self) -> dict | None:
         """Return attributes to display in the UI."""
 
-        zone_data = self.coordinator.data["zones"].get(self._zone_id, {})
-
-        is_bypassed = zone_data.get("bypassed", False)
+        zone_data = self.coordinator.data.get("zones", {}).get(self._zone_id, {})
 
         return {
-            "is_bypassed": is_bypassed,
-            "zone_type": self._zone_type,
+            "is_bypassed": zone_data.get("bypassed", False),
+            "in_alarm": zone_data.get("alarm", False),
         }
 
     @property
     def icon(self) -> str | None:
         """Return the icon to use in the frontend."""
         # Check the state from the extra_state_attributes property's logic
-        zone_data = self.coordinator.data["zones"].get(self._zone_id, {})
-        is_bypassed = zone_data.get("bypassed", False)
+        zone_data = self.coordinator.data.get("zones", {}).get(self._zone_id, {})
 
-        if is_bypassed:
+        if zone_data.get("alarm"):
             # Use a distinctive icon for bypassed zones
+            return "mdi:alarm-light"
+        if zone_data.get("bypassed"):
             return "mdi:shield-off-outline"
 
         # Fallback to the default icon for motion/open sensors
