@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_NAME, CONF_CODE
+from homeassistant.const import CONF_CODE, CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
@@ -45,7 +46,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
-async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
     """Validate the user input is correct.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
@@ -55,9 +56,10 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     try:
         # Attempt connection
-        await api.connect()
-        # If successful, close it immediately
-        await api.close_connection()
+        async with asyncio.timeout(10):
+            await api.connect()
+            # If successful, close it immediately
+            await api.close_connection()
     except Exception as err:
         _LOGGER.error("Failed to connect: %s", err)
         raise CannotConnect from err
@@ -246,6 +248,35 @@ class ArrowHeadConfigFlow(ConfigFlow, domain=DOMAIN):
                 "index": str(current_index),
                 "count": str(self._control_count),
             },
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of the host/port."""
+        errors: dict[str, str] = {}
+        if not (entry_id := self.context.get("entry_id")):
+            return self.async_abort(reason="reconfigure_successful")
+        config_entry = self.hass.config_entries.async_get_entry(entry_id)
+
+        if not config_entry:
+            return self.async_abort(reason="reconfigure_successful")
+
+        if user_input:
+            try:
+                await validate_input(self.hass, user_input)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    config_entry, data={**config_entry.data, **user_input}
+                )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_USER_DATA_SCHEMA, config_entry.data
+            ),
+            errors=errors,
         )
 
 

@@ -1,21 +1,36 @@
 """Data Coordinator for AAP integration."""
 
+import asyncio
 from collections.abc import Mapping
-import copy
 from datetime import timedelta
 import logging
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .arrowhead_alarm_api import ArrowheadAlarmAPI
+from .arrowhead_alarm_api import ArrowheadAlarmAPI, TranslatedMessage
 from .const import ZONE_NUMBER, ZONES
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
+class ZoneStatus(TypedDict):
+    """Type definition for individual zone status."""
+
+    open: bool
+    alarm: bool
+    bypassed: bool
+
+
+class ArrowheadData(TypedDict):
+    """Type defintition for the coordinator's data."""
+
+    partition_status: str | None
+    zones: dict[int, ZoneStatus]
+
+
+class ArrowheadAlarmCoordinator(DataUpdateCoordinator[ArrowheadData]):
     """Arrowhead_Alarm coordinator."""
 
     def __init__(
@@ -46,29 +61,33 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
 
         self.api.register_callback(self._async_handle_api_message)
 
-    def _get_initial_data(self) -> dict[str, Any]:
+    def _get_initial_data(self) -> ArrowheadData:
         """Return the default data structure."""
-        zones_init = {
-            z[ZONE_NUMBER]: {"open": False, "alarm": False, "bypassed": False}
+        zones_init: dict[int, ZoneStatus] = {
+            int(z[ZONE_NUMBER]): ZoneStatus(open=False, alarm=False, bypassed=False)
             for z in self.configured_zones
         }
         return {
-            "partition_status": "D",
+            "partition_status": "partition_disarmed",
             "zones": zones_init,
         }
 
-    async def _async_handle_api_message(self, message: dict[str, Any]) -> None:
+    async def _async_handle_api_message(self, message: TranslatedMessage) -> None:
         """Process push messages from the API."""
 
-        msg_type = message.get("type")
-        msg_data = message.get("data")
+        msg_type = message["type"]
+        msg_data = message["data"]
 
         # Handle Command Responses (Success/Error)
         if msg_type == "command_response" and msg_data:
-            if msg_data["status"] == "error":
-                _LOGGER.error("Alarm Panel returned Error Code: %s", msg_data["code"])
+            if msg_data.get("status", None) == "error":
+                _LOGGER.error(
+                    "Alarm Panel returned Error Code: %s", msg_data.get("code", "")
+                )
                 # Optional: Fire a Home Assistant event so you can trigger a notification
-                self.hass.bus.fire("arrowhead_alarm_error", {"code": msg_data["code"]})
+                self.hass.bus.fire(
+                    "arrowhead_alarm_error", {"code": msg_data.get("code", "")}
+                )
             else:
                 _LOGGER.debug(
                     "Alarm Panel Command Successful: %s", msg_data.get("command")
@@ -81,9 +100,12 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
             return
 
         # Create a shallow copy of the data dictionary to ensure HA sees the update
-        new_data = copy.deepcopy(self.data)
+        new_data: ArrowheadData = {
+            "partition_status": self.data["partition_status"],
+            "zones": dict(self.data["zones"]),
+        }
 
-        # --- 1. HANDLE SYNC START ---
+        # --- HANDLE SYNC START ---
         if msg_type == "sync_start":
             self._sync_in_progress = True
             self._received_zones.clear()
@@ -92,11 +114,13 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
         if not msg_data:
             return
 
-        # --- 3. HANDLE ZONE UPDATES ---
+        # --- HANDLE ZONE UPDATES ---
         if msg_type == "zone":
-            zone_id = int(msg_data["zone_id"])
-            # status_type = msg_data["status_type"]
-            # action = msg_data["action"]
+            zone_id = int(msg_data.get("zone_id", 0))
+            status_key: Literal["open", "alarm", "bypassed"] = cast(
+                Literal["open", "alarm", "bypassed"], msg_data.get("status_type")
+            )
+            action: bool = msg_data.get("action", False)
 
             # If we are in the middle of a status dump, track this zone ID
             if self._sync_in_progress:
@@ -104,14 +128,34 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
 
             # Update the zone in our data structure
             if zone_id in new_data["zones"]:
-                # new_data["zones"][zone_id][status_type] = action
-                new_zones = dict(new_data["zones"])
-                new_zones[zone_id] = dict(new_zones[zone_id])
-                new_zones[zone_id][msg_data["status_type"]] = msg_data["action"]
-                new_data["zones"] = new_zones
-        # --- 2. HANDLE PARTITION UPDATES & SYNC CLEANUP ---
+                cur_zone = cast(ZoneStatus, dict(new_data["zones"][zone_id]))
+                cur_zone[status_key] = action  # type: ignore[literal-required]
+                new_data["zones"][zone_id] = cur_zone
+
+            if status_key == "alarm":
+                if action:
+                    _LOGGER.info(
+                        "Zone %s triggered alarm. Promoting partition to in_alarm",
+                        zone_id,
+                    )
+                    new_data["partition_status"] = "partition_in_alarm"
+                else:
+                    other_alarms = any(
+                        z["alarm"]
+                        for zid, z in new_data["zones"].items()
+                        if zid != zone_id
+                    )
+                    if (
+                        not other_alarms
+                        and new_data["partition_status"] == "partition_in_alarm"
+                    ):
+                        _LOGGER.info(
+                            "All zone alarms cleared. Restoring partition status"
+                        )
+                        new_data["partition_status"] = "partition_disarmed"
+        # --- HANDLE PARTITION UPDATES & SYNC CLEANUP ---
         elif msg_type == "partition":
-            new_status = msg_data["status"]
+            new_status = cast(str, msg_data.get("status"))
             current_status = new_data["partition_status"]
 
             armed_states = [
@@ -138,12 +182,12 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
                 new_data["partition_status"] = new_status
 
             # Handle Sync Cleanup during a status dump
-            if msg_data["raw_code"] == "RO" and self._sync_in_progress:
+            if new_status == "partition_ready" and self._sync_in_progress:
                 for zid in new_data["zones"]:
                     if zid not in self._received_zones:
-                        new_data["zones"][zid]["bypassed"] = False
-                        new_data["zones"][zid]["open"] = False
-                        new_data["zones"][zid]["alarm"] = False
+                        new_data["zones"][zid] = ZoneStatus(
+                            open=False, alarm=False, bypassed=False
+                        )
 
                 self._sync_in_progress = False
 
@@ -151,25 +195,19 @@ class ArrowheadAlarmCoordinator(DataUpdateCoordinator):
         # This pushes the update to all entities (binary sensors, switches, alarm panel)
         self.async_set_updated_data(new_data)
 
-    async def _async_update_data(self) -> dict[str, Any]:
+    async def _async_update_data(self) -> ArrowheadData:
         """Called periodically and during setup to connect and start listener."""
 
         try:
-            if not self.api.is_connected:
-                await self.api.connect()
-
-            await self.api.set_mode(2)
-            await self.api.request_status()
+            async with asyncio.timeout(10):
+                if not self.api.is_connected:
+                    await self.api.connect()
+                    await self.api.set_mode(2)
+                await self.api.request_status()
 
             if self.data is None:
-                zones_init = {
-                    z[ZONE_NUMBER]: {"open": False, "alarm": False, "bypassed": False}
-                    for z in self.configured_zones
-                }
-                return {
-                    "partition_status": "D",
-                    "zones": zones_init,
-                }
+                return self._get_initial_data()
+
             return self.data  # noqa: TRY300
 
         except Exception as err:

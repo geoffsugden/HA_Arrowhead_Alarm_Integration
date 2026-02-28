@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceEntry
 
 from .arrowhead_alarm_api import ArrowheadAlarmAPI
 from .const import DOMAIN
 from .coordinator import ArrowheadAlarmCoordinator
+from .services import async_setup_services
 
 _PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -29,48 +29,37 @@ class RuntimeData:
     coordinator: ArrowheadAlarmCoordinator
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ArrowheadConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, config_entry: ArrowheadConfigEntry
+) -> bool:
     """Set up Arrowhead Alarm Panel from a config entry."""
 
-    api = ArrowheadAlarmAPI(entry.data[CONF_HOST], entry.data[CONF_PORT])
+    host: str = config_entry.data[CONF_HOST]
+    port: int = config_entry.data[CONF_PORT]
+    api = ArrowheadAlarmAPI(host, port)
 
-    coordinator = ArrowheadAlarmCoordinator(hass, api, entry.entry_id, entry.data)
+    coordinator = ArrowheadAlarmCoordinator(
+        hass, api, config_entry.entry_id, config_entry.data
+    )
 
     await coordinator.async_config_entry_first_refresh()
 
-    entry.runtime_data = RuntimeData(coordinator=coordinator)
+    config_entry.runtime_data = RuntimeData(coordinator=coordinator)
 
-    await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(config_entry, _PLATFORMS)
 
-    async def handle_alarm_action(call):
-        """Handle the service call."""
-        zone_id = call.data.get("zone_id")
-        pin = call.data.get("pin")
-        if call.service == "bypass_zone":
-            await coordinator.api.bypass_zone(zone_id)
-        elif call.service == "unbypass_zone":
-            await coordinator.api.unbypass_zone(zone_id)
-        else:
-            await coordinator.api.disarm(pin)
-        await coordinator.async_refresh()
+    if not hass.services.has_service(DOMAIN, "disarm"):
+        await async_setup_services(hass)
 
-    hass.services.async_register(DOMAIN, "bypass_zone", handle_alarm_action)
-    hass.services.async_register(DOMAIN, "unbypass_zone", handle_alarm_action)
-    hass.services.async_register(DOMAIN, "disarm", handle_alarm_action)
-
-    return True
-
-
-async def async_remove_config_entry_device(
-    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
-) -> bool:
-    """Delete device if selected from UI."""
-    # Adding this function shows the delete device option in the UI.
-    # Remove this function if you do not want that option.
-    # You may need to do some checks here before allowing devices to be removed.
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ArrowheadConfigEntry) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, _PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, _PLATFORMS)
+
+    if unload_ok:
+        for service in ["bypass_zone", "unbypass_zone", "disarm"]:
+            hass.services.async_remove(DOMAIN, service)
+
+    return unload_ok
